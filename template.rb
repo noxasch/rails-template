@@ -130,11 +130,49 @@ if yes?("Would you like to integrate with inertia? (y/n)")
   run "bundle add inertia_rails-contrib --skip-install", verbose: false
   run "bundle add js_from_routes --skip-install", verbose: false
   run "bundle add types_from_serializers --skip-install", verbose: false
+
+  insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
+    <<-RUBY
+    include Pagy::Backend
+
+    before_action :set_csrf_cookie
+
+    rescue_from ActionController::InvalidAuthenticityToken, with: :inertia_page_expired_error
+
+    inertia_share flash: -> { flash.to_hash }
+
+    def inertia_page_expired_error
+      redirect_back fallback_location: '/', notice: 'The page expired, please try again.'
+    end
+
+    def request_authenticity_tokens
+      super << request.headers['HTTP_X_XSRF_TOKEN']
+    end
+
+    private
+
+    def set_csrf_cookie
+      cookies['XSRF-TOKEN'] = {
+        value: form_authenticity_token,
+        same_site: 'Strict'
+      }
+    end
+    RUBY
+  end
+
+
   say "Running bundle install"
   run "bundle install", verbose: false
   rails_command "generate inertia:install"
   # run "bin/rails generate inertia:install"
 else
+  insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
+    <<-RUBY
+    include Pagy::Backend
+
+    RUBY
+  end
+
   say "Running bundle install"
   run "bundle install", verbose: false
 end
