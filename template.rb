@@ -38,20 +38,20 @@ run "bundle add oj_serializers --skip-install", verbose: false
 run "bundle add pagy --skip-install", verbose: false
 run "bundle add phony_rails --skip-install", verbose: false
 
-if yes?("Would you like use sidekiq?")
+if yes?("Would you like use sidekiq? (y/n)")
   run "bundle add sidekiq --skip-install", verbose: false
 end
 
-if yes?("Would you like to use shrine for file attachment?")
+if yes?("Would you like to use shrine for file attachment? (y/n)")
   run "bundle add image_processing --skip-install", verbose: false
   run "bundle add marcel --skip-install", verbose: false
   run "bundle add ruby-vips --skip-install", verbose: false
   run "bundle add shrine --skip-install", verbose: false
 
-  if yes?("Would you like to use s3 or s3 compatible service?")
-    run "bundle add aws-sdk-s3 --skip-install"
+  if yes?("Would you like to use s3 or s3 compatible service? (y/n)")
+    run "bundle add aws-sdk-s3 --skip-install", verbose: false
 
-    file "app/components/foo.rb", <<-CODE
+    file "config/initializers/shrine.rb", <<-CODE
       require "shrine"
       require "shrine/storage/file_system"
       require "shrine/storage/memory"
@@ -80,7 +80,7 @@ if yes?("Would you like to use shrine for file attachment?")
       Shrine.plugin :determine_mime_type, analyzer: :marcel
     CODE
   else
-    file "app/components/foo.rb", <<-CODE
+    file "config/initializers/shrine.rb", <<-CODE
       require "shrine"
       require "shrine/storage/file_system"
       require "shrine/storage/memory"
@@ -117,7 +117,14 @@ if yes?("Would you like to use shrine for file attachment?")
   end
 end
 
-if yes?("Would you like to integrate with inertia?")
+file "app/serializers/application_serializer.rb", <<-CODE  
+  class ApplicationSerializer < Oj::Serializer
+    transform_keys :camelize
+    sort_attributes_by :name
+  end
+CODE
+
+if yes?("Would you like to integrate with inertia? (y/n)")
   # TODO
   run "bundle add inertia_rails --skip-install", verbose: false
   run "bundle add inertia_rails-contrib --skip-install", verbose: false
@@ -126,12 +133,203 @@ if yes?("Would you like to integrate with inertia?")
   say "Running bundle install"
   run "bundle install", verbose: false
   rails_command "generate inertia:install"
+  # run "bin/rails generate inertia:install"
 else
   say "Running bundle install"
   run "bundle install", verbose: false
 end
 
 say "Installing config gem"
-rails_command "generate config:install"
+run "bin/rails generate config:install"
 say "Installing devise"
-rails_command "generate devise:install"
+run "bin/rails generate devise:install"
+
+file "app/services/application_service.rb", <<-CODE
+  #
+  # Any service class that inherit this base class can be call as in the example
+  # and return the same outcome format
+  #
+  # ideally we want to return result containing the processed object
+  #   in case of error, we want to return result/outcome object containing the error and success: false
+  #   and should not catch expected error outside of service class
+  #   - similar approach to mutation gem which act as service class in a controller
+  #
+  # @example:
+  #   `MyService.call(args)`
+  #
+  # @note: see existing class that inherit `ApplicationService` for example
+  #
+  class ApplicationService
+    def self.call(*, &)
+      new(*, &).call
+    end
+
+    def call
+      raise NotImplementedError
+    end
+
+    def logger
+      @logger ||= ServiceLog
+    end
+  end
+CODE
+
+file "app/mutations/application_mutation.rb", <<-CODE  
+  class ApplicationMutation < Mutations::Command
+    private
+
+    def add_model_errors(obj)
+      obj.errors.each do |err|
+        add_error(err.attribute.to_sym, err.type.to_sym, "#\{err.message}.")
+      end
+    end
+  end
+CODE
+
+file "app/listeners/application_listener.rb", <<-CODE  
+  class ApplicationListener
+  end
+CODE
+
+file "lib/generators/mutation_generator.rb", <<-CODE
+  class MutationGenerator < Rails::Generators::NamedBase
+    check_class_collision suffix: 'Mutation'
+    desc 'This generator creates an mutation file inside app/mutations'
+
+    def create_mutation_file
+      create_file "app/mutations/#\{file_path}_mutation.rb", <<~RUBY
+        class #\{class_name}Mutation < ApplicationMutation
+          required do
+          end
+
+          optional do
+          end
+
+          protected
+
+          def execute; end
+
+          def validate; end
+        end
+      RUBY
+
+      create_file "spec/mutations/#\{file_path}_mutation_spec.rb", <<~RUBY
+        require 'rails_helper'
+
+        RSpec.describe #\{class_name}Mutation, type: :mutation do
+          pending "add some examples to (or delete) \#\{__FILE__}"
+        end
+      RUBY
+    end
+  end
+CODE
+
+file "lib/generators/service_generator.rb", <<-CODE  
+  class ServiceGenerator < Rails::Generators::NamedBase
+    check_class_collision suffix: 'Service'
+    desc 'This generator creates an service class file with its companion spec file'
+
+    def create_service_file
+      create_file "app/services/#\{file_path}_service.rb", <<~RUBY
+        class #\{class_name}Service < #\{parent_class_name.classify}
+          def self.call(*, &)
+            new(*, &).call
+          end
+
+          def initialize(args1, args2, args = {})
+            @args1 = args1
+            @args2 = args2
+            @args = args
+          end
+
+          def call; end
+        end
+      RUBY
+
+      create_file "spec/services/#\{file_path\}_service_spec.rb", <<~RUBY
+        require 'rails_helper'
+
+        RSpec.describe #\{class_name\}Service, type: :service do
+          pending "add some examples to (or delete) \#\{__FILE__}"
+        end
+      RUBY
+    end
+
+    private
+
+    def parent_class_name
+      'ApplicationService'
+    end
+  end
+CODE
+
+file "lib/generators/serializer_generator.rb", <<-CODE
+  class SerializerGenerator < Rails::Generators::NamedBase
+    check_class_collision suffix: 'Serializer'
+    desc 'This generator creates an Serializer file inside app/serializers'
+    class_option :parent, type: :string, desc: 'The parent class for the generated serializer'
+
+    def create_serializer_file
+      create_file "app/serializers/#\{file_path}_serializer.rb", <<~RUBY
+        class #\{class_name}Serializer < #\{parent_class_name.classify}
+          object_as :object
+
+          attributes :id
+        end
+      RUBY
+
+      create_file "spec/serializers/#\{file_path}_serializer_spec.rb", <<~RUBY
+        require 'rails_helper'
+
+        RSpec.describe #\{class_name}Serializer, type: :serializer do
+          pending "add some examples to (or delete) \#\{__FILE__}"
+        end
+      RUBY
+    end
+
+    private
+
+    def parent
+      options[:parent]
+    end
+
+    def parent_class_name
+      parent || 'ApplicationSerializer'
+    end
+  end
+CODE
+
+file "lib/generators/listener_generator.rb", <<-CODE
+  # frozen_string_literal: true
+
+  class ListenerGenerator < Rails::Generators::NamedBase
+    check_class_collision suffix: 'Listener'
+    desc 'This generator creates an Listener file inside app/listeners'
+    class_option :parent, type: :string, desc: 'The parent class for the generated listener'
+
+    def create_mutation_file
+      create_file "app/listeners/#\{file_path}_listener.rb", <<~RUBY
+        class #\{class_name}Listener < #\{parent_class_name.classify}
+        end
+      RUBY
+
+      create_file "spec/listeners/#\{file_path}_listener_spec.rb", <<~RUBY
+        require 'rails_helper'
+
+        RSpec.describe #\{class_name}Listener, type: :serializer do
+          pending "add some examples to (or delete) \#\{__FILE__}"
+        end
+      RUBY
+    end
+
+    private
+
+    def parent
+      options[:parent]
+    end
+
+    def parent_class_name
+      parent || 'ApplicationListener'
+    end
+  end
+CODE
