@@ -1,55 +1,68 @@
+NODE = 'pnpm'.freeze
+
+# TODO assert minimu node version
+# modularize into function
+
+# set source path
+source_paths.unshift(File.dirname(__FILE__))
 
 say "Adding necessary gems"
+
 # development test gem
-run "bundle add brakeman -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add bullet -g \"development, test\" --skip-install", verbose: false
-run "bundle add rspec-rails -g \"development, test\"", verbose: false
-run "bundle add factory_bot_rails -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add brakeman -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add rubocop -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add rubocop-performance -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add rubocop-rails -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add rubocop-rspec -g \"development, test\" --require=false --skip-install", verbose: false
-run "bundle add brakeman -g \"development, test\" --require=false --skip-install", verbose: false
+gem_group :development, :test do
+  gem "bullet"
+  gem "rspec-rails"
+  gem "factory_bot_rails", require: false
+  gem "rubocop", require: false
+  gem "rubocop-performance", require: false
+  gem "rubocop-rails", require: false
+  gem "rubocop-rspec", require: false
+  gem "js_from_routes"
+  gem "types_from_serializers"
+end
 
 # development gem
-run "bundle add annotate -g \"development\"", verbose: false
-run "bundle add database_consistency -g \"development\" --require=false --skip-install", verbose: false
+gem_group :development do
+  gem "annotate"
+  gem "database_consistency", require: false
+end
 
 # test gem
-run "bundle add rspec-json_expectations -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add rspec_junit_formatter -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add shoulda-matchers -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add simplecov -g \"test\" --require=false", verbose: false
-run "bundle add simplecov-cobertura -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add ruby-prof -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add test-prof -g \"test\" --require=false --skip-install", verbose: false
-run "bundle add wisper-rspec -g \"test\" --require=false --skip-install", verbose: false
+gem_group :test do
+  gem "rspec-json_expectations", require: false
+  gem "rspec_junit_formatter", require: false
+  gem "shoulda-matchers", require: false
+  gem "simplecov", require: false
+  gem "simplecov-cobertura", require: false
+  gem "ruby-prof", require: false
+  gem "test-prof", require: false
+  gem "wisper-rspec", require: false
+end
 
 # gem
-run "bundle add config --skip-install", verbose: false
-run "bundle add devise --skip-install", verbose: false
-run "bundle add devise_invitable --skip-install", verbose: false
-run "bundle add action_policy --skip-install", verbose: false
-run "bundle add friendly_id --skip-install", verbose: false
-run "bundle add hash_to_struct --skip-install", verbose: false
-run "bundle add mutations --skip-install", verbose: false
-run "bundle add oj_serializers --skip-install", verbose: false
-run "bundle add pagy --skip-install", verbose: false
-run "bundle add phony_rails --skip-install", verbose: false
+gem "config"
+gem "devise"
+gem "devise_invitable"
+gem "action_policy"
+gem "friendly_id"
+gem "hash_to_struct"
+gem "mutations"
+gem "oj_serializers"
+gem "pagy"
+gem "phony_rails"
 
 if yes?("Would you like use sidekiq? (y/n)")
-  run "bundle add sidekiq --skip-install", verbose: false
+  gem "sidekiq"
 end
 
 if yes?("Would you like to use shrine for file attachment? (y/n)")
-  run "bundle add image_processing --skip-install", verbose: false
-  run "bundle add marcel --skip-install", verbose: false
-  run "bundle add ruby-vips --skip-install", verbose: false
-  run "bundle add shrine --skip-install", verbose: false
+  gem "image_processing"
+  gem "marcel"
+  gem "ruby-vips"
+  gem "shrine"
 
   if yes?("Would you like to use s3 or s3 compatible service? (y/n)")
-    run "bundle add aws-sdk-s3 --skip-install", verbose: false
+    gem "aws-sdk-s3"
 
     file "config/initializers/shrine.rb", <<-CODE
       require "shrine"
@@ -117,19 +130,14 @@ if yes?("Would you like to use shrine for file attachment? (y/n)")
   end
 end
 
-file "app/serializers/application_serializer.rb", <<-CODE  
-  class ApplicationSerializer < Oj::Serializer
-    transform_keys :camelize
-    sort_attributes_by :name
-  end
-CODE
+# NOTE: need to run before bundle install
+copy_file "app/serializers/application_serializer.rb", "app/serializers/application_serializer.rb"
+copy_file "app/mutations/application_mutation.rb", "app/mutations/application_mutation.rb"
+copy_file "app/services/application_service.rb", "app/services/application_service.rb"
 
 if yes?("Would you like to integrate with inertia? (y/n)")
   # TODO
-  run "bundle add inertia_rails --skip-install", verbose: false
-  run "bundle add inertia_rails-contrib --skip-install", verbose: false
-  run "bundle add js_from_routes --skip-install", verbose: false
-  run "bundle add types_from_serializers --skip-install", verbose: false
+  gem "inertia_rails"
 
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
     <<-RUBY
@@ -168,8 +176,30 @@ if yes?("Would you like to integrate with inertia? (y/n)")
 else
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
     <<-RUBY
-    include Pagy::Backend
+  include Pagy::Backend
 
+  before_action :set_csrf_cookie
+
+  rescue_from ActionController::InvalidAuthenticityToken, with: :inertia_page_expired_error
+
+  inertia_share flash: -> { flash.to_hash }
+
+  def inertia_page_expired_error
+    redirect_back fallback_location: "/", notice: "The page expired, please try again."
+  end
+
+  def request_authenticity_tokens
+    super << request.headers["HTTP_X_XSRF_TOKEN"]
+  end
+
+  private
+
+  def set_csrf_cookie
+    cookies["XSRF-TOKEN"] = {
+      value: form_authenticity_token,
+      same_site: "Strict"
+    }
+  end
     RUBY
   end
 
@@ -182,192 +212,31 @@ run "bin/rails generate config:install"
 say "Installing devise"
 run "bin/rails generate devise:install"
 
-file "app/services/application_service.rb", <<-CODE
-  #
-  # Any service class that inherit this base class can be call as in the example
-  # and return the same outcome format
-  #
-  # ideally we want to return result containing the processed object
-  #   in case of error, we want to return result/outcome object containing the error and success: false
-  #   and should not catch expected error outside of service class
-  #   - similar approach to mutation gem which act as service class in a controller
-  #
-  # @example:
-  #   `MyService.call(args)`
-  #
-  # @note: see existing class that inherit `ApplicationService` for example
-  #
-  class ApplicationService
-    def self.call(*, &)
-      new(*, &).call
-    end
+source = File.expand_path(find_in_source_paths("config/initializers/config.rb"))
+render = File.open(source) { |input| input.binmode.read }
+prepend_to_file 'config/initializers/config.rb', render
 
-    def call
-      raise NotImplementedError
-    end
+copy_file "config/initializers/js_from_routes.rb", "config/initializers/js_from_routes.rb"
 
-    def logger
-      @logger ||= ServiceLog
-    end
-  end
-CODE
+copy_file "lib/generators/listener_generator.rb", "lib/generators/listener_generator.rb"
+copy_file "lib/generators/mutation_generator.rb", "lib/generators/mutation_generator.rb"
+copy_file "lib/generators/serializer_generator.rb", "lib/generators/serializer_generator.rb"
+copy_file "lib/generators/service_generator.rb", "lib/generators/service_generator.rb"
 
-file "app/mutations/application_mutation.rb", <<-CODE  
-  class ApplicationMutation < Mutations::Command
-    private
+file "app/listeners/application_listener.rb", <<-RUBY  
+class ApplicationListener
+end
+RUBY
 
-    def add_model_errors(obj)
-      obj.errors.each do |err|
-        add_error(err.attribute.to_sym, err.type.to_sym, "#\{err.message}.")
-      end
-    end
-  end
-CODE
+say "Adding node packages"
+if NODE == 'pnpm'
+  run "pnpm add @js-from-routes/axios", verbose: false
+  run "pnpm add -D eslint @types/node @antfu/eslint-config vite-plugin-full-reload", verbose: false
+else
+  run "npm install @js-from-routes/axios", verbose: false
+  run "npm install -D eslint @types/node @antfu/eslint-config vite-plugin-full-reload", verbose: false
+end
 
-file "app/listeners/application_listener.rb", <<-CODE  
-  class ApplicationListener
-  end
-CODE
-
-file "lib/generators/mutation_generator.rb", <<-CODE
-  class MutationGenerator < Rails::Generators::NamedBase
-    check_class_collision suffix: 'Mutation'
-    desc 'This generator creates an mutation file inside app/mutations'
-
-    def create_mutation_file
-      create_file "app/mutations/#\{file_path}_mutation.rb", <<~RUBY
-        class #\{class_name}Mutation < ApplicationMutation
-          required do
-          end
-
-          optional do
-          end
-
-          protected
-
-          def execute; end
-
-          def validate; end
-        end
-      RUBY
-
-      create_file "spec/mutations/#\{file_path}_mutation_spec.rb", <<~RUBY
-        require 'rails_helper'
-
-        RSpec.describe #\{class_name}Mutation, type: :mutation do
-          pending "add some examples to (or delete) \#\{__FILE__}"
-        end
-      RUBY
-    end
-  end
-CODE
-
-file "lib/generators/service_generator.rb", <<-CODE  
-  class ServiceGenerator < Rails::Generators::NamedBase
-    check_class_collision suffix: 'Service'
-    desc 'This generator creates an service class file with its companion spec file'
-
-    def create_service_file
-      create_file "app/services/#\{file_path}_service.rb", <<~RUBY
-        class #\{class_name}Service < #\{parent_class_name.classify}
-          def self.call(*, &)
-            new(*, &).call
-          end
-
-          def initialize(args1, args2, args = {})
-            @args1 = args1
-            @args2 = args2
-            @args = args
-          end
-
-          def call; end
-        end
-      RUBY
-
-      create_file "spec/services/#\{file_path\}_service_spec.rb", <<~RUBY
-        require 'rails_helper'
-
-        RSpec.describe #\{class_name\}Service, type: :service do
-          pending "add some examples to (or delete) \#\{__FILE__}"
-        end
-      RUBY
-    end
-
-    private
-
-    def parent_class_name
-      'ApplicationService'
-    end
-  end
-CODE
-
-file "lib/generators/serializer_generator.rb", <<-CODE
-  class SerializerGenerator < Rails::Generators::NamedBase
-    check_class_collision suffix: 'Serializer'
-    desc 'This generator creates an Serializer file inside app/serializers'
-    class_option :parent, type: :string, desc: 'The parent class for the generated serializer'
-
-    def create_serializer_file
-      create_file "app/serializers/#\{file_path}_serializer.rb", <<~RUBY
-        class #\{class_name}Serializer < #\{parent_class_name.classify}
-          object_as :object
-
-          attributes :id
-        end
-      RUBY
-
-      create_file "spec/serializers/#\{file_path}_serializer_spec.rb", <<~RUBY
-        require 'rails_helper'
-
-        RSpec.describe #\{class_name}Serializer, type: :serializer do
-          pending "add some examples to (or delete) \#\{__FILE__}"
-        end
-      RUBY
-    end
-
-    private
-
-    def parent
-      options[:parent]
-    end
-
-    def parent_class_name
-      parent || 'ApplicationSerializer'
-    end
-  end
-CODE
-
-file "lib/generators/listener_generator.rb", <<-CODE
-  # frozen_string_literal: true
-
-  class ListenerGenerator < Rails::Generators::NamedBase
-    check_class_collision suffix: 'Listener'
-    desc 'This generator creates an Listener file inside app/listeners'
-    class_option :parent, type: :string, desc: 'The parent class for the generated listener'
-
-    def create_mutation_file
-      create_file "app/listeners/#\{file_path}_listener.rb", <<~RUBY
-        class #\{class_name}Listener < #\{parent_class_name.classify}
-        end
-      RUBY
-
-      create_file "spec/listeners/#\{file_path}_listener_spec.rb", <<~RUBY
-        require 'rails_helper'
-
-        RSpec.describe #\{class_name}Listener, type: :serializer do
-          pending "add some examples to (or delete) \#\{__FILE__}"
-        end
-      RUBY
-    end
-
-    private
-
-    def parent
-      options[:parent]
-    end
-
-    def parent_class_name
-      parent || 'ApplicationListener'
-    end
-  end
-CODE
+say "you can specify gem version by using pessmize by running:"
+say "gem install pessmize"
+say "pessimize"
