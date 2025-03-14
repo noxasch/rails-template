@@ -23,7 +23,7 @@ class ServiceGenerator < Rails::Generators::NamedBase
       require 'rails_helper'
 
       RSpec.describe #\{class_name\}Service, type: :service do
-        pending "add some examples to (or delete) \#\{__FILE__}"
+        pending "add some examples to (or delete) \#{__FILE__}"
       end
     RUBY
   end

@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 class ListenerGenerator < Rails::Generators::NamedBase
   check_class_collision suffix: 'Listener'
   desc 'This generator creates an Listener file inside app/listeners'
@@ -15,7 +13,7 @@ class ListenerGenerator < Rails::Generators::NamedBase
       require 'rails_helper'
 
       RSpec.describe #\{class_name}Listener, type: :serializer do
-        pending "add some examples to (or delete) \#\{__FILE__}"
+        pending "add some examples to (or delete) \#{__FILE__}"
       end
     RUBY
   end

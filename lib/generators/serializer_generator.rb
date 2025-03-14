@@ -16,7 +16,7 @@ class SerializerGenerator < Rails::Generators::NamedBase
       require 'rails_helper'
 
       RSpec.describe #\{class_name}Serializer, type: :serializer do
-        pending "add some examples to (or delete) \#\{__FILE__}"
+        pending "add some examples to (or delete) \#{__FILE__}"
       end
     RUBY
   end

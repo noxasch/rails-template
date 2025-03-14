@@ -3,6 +3,8 @@ NODE = 'pnpm'.freeze
 # TODO assert minimu node version
 # modularize into function
 
+sidekiq = false
+
 # set source path
 source_paths.unshift(File.dirname(__FILE__))
 
@@ -12,7 +14,7 @@ say "Adding necessary gems"
 gem_group :development, :test do
   gem "bullet"
   gem "rspec-rails"
-  gem "factory_bot_rails", require: false
+  gem "factory_bot_rails"
   gem "rubocop", require: false
   gem "rubocop-performance", require: false
   gem "rubocop-rails", require: false
@@ -52,6 +54,7 @@ gem "pagy"
 gem "phony_rails"
 
 if yes?("Would you like use sidekiq? (y/n)")
+  sidekiq = true
   gem "sidekiq"
 end
 
@@ -140,7 +143,7 @@ if yes?("Would you like to integrate with inertia? (y/n)")
   gem "inertia_rails"
 
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
-    <<-RUBY
+  <<-RUBY
     include Pagy::Backend
 
     before_action :set_csrf_cookie
@@ -165,7 +168,7 @@ if yes?("Would you like to integrate with inertia? (y/n)")
         same_site: 'Strict'
       }
     end
-    RUBY
+  RUBY
   end
 
 
@@ -175,7 +178,7 @@ if yes?("Would you like to integrate with inertia? (y/n)")
   # run "bin/rails generate inertia:install"
 else
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
-    <<-RUBY
+<<-RUBY
   include Pagy::Backend
 
   before_action :set_csrf_cookie
@@ -200,17 +203,82 @@ else
       same_site: "Strict"
     }
   end
-    RUBY
+RUBY
   end
 
   say "Running bundle install"
   run "bundle install", verbose: false
 end
 
+run "bundle binstubs rspec-core", verbose: false
+say "Installing rspec"
+run "bin/rails generate rspec:install", verbose: false
 say "Installing config gem"
-run "bin/rails generate config:install"
+run "bin/rails generate config:install", verbose: false
 say "Installing devise"
-run "bin/rails generate devise:install"
+run "bin/rails generate devise:install", verbose: false
+say "Installing annotate"
+run "bin/rails generate annotate:install", verbose: false
+
+insert_into_file "spec/rails_helper.rb", after: /^# Add additional requires.*\n/ do
+<<-RUBY
+  require 'simplecov'
+  require 'simplecov_json_formatter'
+  require 'inertia_rails/rspec'
+  require 'shoulda/matchers'
+  require 'rspec/json_expectations'
+  require 'support/negate_matchers'
+
+  # simplecov
+  SimpleCov.start 'rails' do
+    if ENV["CI"]
+      formatter SimpleCov::Formatter::JSONFormatter
+    else
+      formatter SimpleCov::Formatter::MultiFormatter.new(
+      [
+        SimpleCov::Formatter::JSONFormatter,
+        SimpleCov::Formatter::SimpleFormatter,
+        SimpleCov::Formatter::HTMLFormatter
+      ]
+    )
+    end
+  end
+RUBY
+end
+
+insert_into_file "spec/rails_helper.rb", after: /^  # config.filter_gems_from_backtrace.*\n/ do
+<<-RUBY
+
+  config.include FactoryBot::Syntax::Methods
+  config.include ActiveSupport::Testing::TimeHelpers
+
+  # include devise test helpers
+  config.include Devise::Test::ControllerHelpers, type: :controller
+  config.include Devise::Test::ControllerHelpers, type: :view
+  config.include Devise::Test::IntegrationHelpers, type: :request
+  
+  config.when_first_matching_example_defined(type: :mutation) do
+    require 'support/mutation_matchers'
+  end
+
+  config.when_first_matching_example_defined(type: :listener) do
+    require 'wisper/rspec/matchers'
+    config.include Wisper::RSpec::BroadcastMatcher, type: :listener
+  end
+RUBY
+end
+
+append_to_file 'config/environments/test.rb' do
+<<-RUBY
+
+Shoulda::Matchers.configure do |config|
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
+end
+RUBY
+end
 
 source = File.expand_path(find_in_source_paths("config/initializers/config.rb"))
 render = File.open(source) { |input| input.binmode.read }
@@ -223,10 +291,28 @@ copy_file "lib/generators/mutation_generator.rb", "lib/generators/mutation_gener
 copy_file "lib/generators/serializer_generator.rb", "lib/generators/serializer_generator.rb"
 copy_file "lib/generators/service_generator.rb", "lib/generators/service_generator.rb"
 
+copy_file "spec/support/mutation_matchers.rb", "spec/support/mutation_matchers.rb"
+copy_file "spec/support/negate_matchers.rb", "spec/support/negate_matchers.rb"
+
+gsub_file "config/application.rb", /^\s+config\.autoload_lib.*\n/ do
+<<-RUBY
+    config.autoload_lib(ignore: %w[assets tasks generators frontend])
+RUBY
+end
+
 file "app/listeners/application_listener.rb", <<-RUBY  
 class ApplicationListener
 end
 RUBY
+
+if sidekiq
+  insert_into_file "config/application.rb", after: /^\s+config.generators.system_tests.*\n/ do
+  <<-RUBY
+
+    config.active_job.queue_adapter = :sidekiq
+  RUBY
+  end    
+end
 
 say "Adding node packages"
 if NODE == 'pnpm'
