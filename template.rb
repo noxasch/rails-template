@@ -143,32 +143,11 @@ if yes?("Would you like to integrate with inertia? (y/n)")
   gem "inertia_rails"
 
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
-  <<-RUBY
-    include Pagy::Backend
-
-    before_action :set_csrf_cookie
-
-    rescue_from ActionController::InvalidAuthenticityToken, with: :inertia_page_expired_error
-
-    inertia_share flash: -> { flash.to_hash }
-
-    def inertia_page_expired_error
-      redirect_back fallback_location: '/', notice: 'The page expired, please try again.'
-    end
-
-    def request_authenticity_tokens
-      super << request.headers['HTTP_X_XSRF_TOKEN']
-    end
-
-    private
-
-    def set_csrf_cookie
-      cookies['XSRF-TOKEN'] = {
-        value: form_authenticity_token,
-        same_site: 'Strict'
-      }
-    end
-  RUBY
+<<-RUBY
+  include Pagy::Backend
+  include InertiaCsrf
+  include InertiaFlash
+RUBY
   end
 
 
@@ -180,29 +159,6 @@ else
   insert_into_file "app/controllers/application_controller.rb", after: /^class ApplicationController.*\n/ do
 <<-RUBY
   include Pagy::Backend
-
-  before_action :set_csrf_cookie
-
-  rescue_from ActionController::InvalidAuthenticityToken, with: :inertia_page_expired_error
-
-  inertia_share flash: -> { flash.to_hash }
-
-  def inertia_page_expired_error
-    redirect_back fallback_location: "/", notice: "The page expired, please try again."
-  end
-
-  def request_authenticity_tokens
-    super << request.headers["HTTP_X_XSRF_TOKEN"]
-  end
-
-  private
-
-  def set_csrf_cookie
-    cookies["XSRF-TOKEN"] = {
-      value: form_authenticity_token,
-      same_site: "Strict"
-    }
-  end
 RUBY
   end
 
