@@ -291,6 +291,10 @@ copy_file "lib/generators/mutation_generator.rb", "lib/generators/mutation_gener
 copy_file "lib/generators/serializer_generator.rb", "lib/generators/serializer_generator.rb"
 copy_file "lib/generators/service_generator.rb", "lib/generators/service_generator.rb"
 
+copy_file "app/controllers/concern/auth.rb", "app/controllers/concern/auth.rb"
+copy_file "app/controllers/concern/inertia_csrf.rb", "app/controllers/concern/inertia_csrf.rb"
+copy_file "app/controllers/concern/inertia_flash.rb", "app/controllers/concern/inertia_flash.rb"
+
 copy_file "spec/support/mutation_matchers.rb", "spec/support/mutation_matchers.rb"
 copy_file "spec/support/negate_matchers.rb", "spec/support/negate_matchers.rb"
 
