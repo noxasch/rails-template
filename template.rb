@@ -20,7 +20,6 @@ gem_group :development, :test do
   gem "rubocop-rails", require: false
   gem "rubocop-rspec", require: false
   gem "js_from_routes"
-  gem "types_from_serializers"
 end
 
 # development gem
@@ -52,6 +51,7 @@ gem "mutations"
 gem "oj_serializers"
 gem "pagy"
 gem "phony_rails"
+gem "types_from_serializers"
 
 if yes?("Would you like use sidekiq? (y/n)")
   sidekiq = true
@@ -152,7 +152,7 @@ RUBY
 
 
   say "Running bundle install"
-  run "bundle install", verbose: false
+  run "bundle install --quiet", verbose: false
   rails_command "generate inertia:install"
   # run "bin/rails generate inertia:install"
 else
@@ -163,7 +163,7 @@ RUBY
   end
 
   say "Running bundle install"
-  run "bundle install", verbose: false
+  run "bundle install --quiet", verbose: false
 end
 
 run "bundle binstubs rspec-core", verbose: false
@@ -241,6 +241,7 @@ render = File.open(source) { |input| input.binmode.read }
 prepend_to_file 'config/initializers/config.rb', render
 
 copy_file "config/initializers/js_from_routes.rb", "config/initializers/js_from_routes.rb"
+copy_file "config/initializers/types_from_serializers.rb", "config/initializers/js_from_routes.rb"
 
 copy_file "lib/generators/listener_generator.rb", "lib/generators/listener_generator.rb"
 copy_file "lib/generators/mutation_generator.rb", "lib/generators/mutation_generator.rb"
@@ -286,3 +287,4 @@ end
 say "you can specify gem version by using pessmize by running:"
 say "gem install pessmize"
 say "pessimize"
+say "--- END ---"
