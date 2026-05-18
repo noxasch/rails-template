@@ -13,11 +13,16 @@ It add (opinionated) required gem, integrate inertia and other andd required int
 > NOTE: This is experimental rails template with inertiajs.
 > Use at your own risk.
 
+## Usage
+1. Clone and run rails new
 ```sh
 git clone git@github.com:noxasch/rails-template.git
 
 rails _7.2.2_ new <APP_NAME> --skip-action-text --skip-active-storage --skip-hotwire --skip-jbuilder --skip-system-test --skip-bootsnap --skip-active-storage -TJA -d postgresql -m=~/PATH/TO/TEMPLATE/rails-template/template.rb
 ```
+
+2. Make sure database.yml is configured properly
+3. Run `bin/dev` and see if you see inertia rails default page
 
 ## References:
 - [js_from_routes](https://js-from-routes.netlify.app/)
