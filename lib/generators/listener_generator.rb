@@ -4,12 +4,12 @@ class ListenerGenerator < Rails::Generators::NamedBase
   class_option :parent, type: :string, desc: 'The parent class for the generated listener'
 
   def create_mutation_file
-    create_file "app/listeners/#\{file_path}_listener.rb", <<~RUBY
+    create_file "app/listeners/#{file_path}_listener.rb", <<~RUBY
       class #\{class_name}Listener < #\{parent_class_name.classify}
       end
     RUBY
 
-    create_file "spec/listeners/#\{file_path}_listener_spec.rb", <<~RUBY
+    create_file "spec/listeners/#{file_path}_listener_spec.rb", <<~RUBY
       require 'rails_helper'
 
       RSpec.describe #\{class_name}Listener, type: :serializer do

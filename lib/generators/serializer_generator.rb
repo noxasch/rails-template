@@ -4,7 +4,7 @@ class SerializerGenerator < Rails::Generators::NamedBase
   class_option :parent, type: :string, desc: 'The parent class for the generated serializer'
 
   def create_serializer_file
-    create_file "app/serializers/#\{file_path}_serializer.rb", <<~RUBY
+    create_file "app/serializers/#{file_path}_serializer.rb", <<~RUBY
       class #\{class_name}Serializer < #\{parent_class_name.classify}
         object_as :object
 
@@ -12,7 +12,7 @@ class SerializerGenerator < Rails::Generators::NamedBase
       end
     RUBY
 
-    create_file "spec/serializers/#\{file_path}_serializer_spec.rb", <<~RUBY
+    create_file "spec/serializers/#{file_path}_serializer_spec.rb", <<~RUBY
       require 'rails_helper'
 
       RSpec.describe #\{class_name}Serializer, type: :serializer do

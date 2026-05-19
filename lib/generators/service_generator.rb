@@ -3,7 +3,7 @@ class ServiceGenerator < Rails::Generators::NamedBase
   desc 'This generator creates an service class file with its companion spec file'
 
   def create_service_file
-    create_file "app/services/#\{file_path}_service.rb", <<~RUBY
+    create_file "app/services/#{file_path}_service.rb", <<~RUBY
       class #\{class_name}Service < #\{parent_class_name.classify}
         def self.call(*, &)
           new(*, &).call
@@ -19,7 +19,7 @@ class ServiceGenerator < Rails::Generators::NamedBase
       end
     RUBY
 
-    create_file "spec/services/#\{file_path\}_service_spec.rb", <<~RUBY
+    create_file "spec/services/#{file_path\}_service_spec.rb", <<~RUBY
       require 'rails_helper'
 
       RSpec.describe #\{class_name\}Service, type: :service do
